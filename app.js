@@ -575,6 +575,96 @@ const SwimTracker = () => {
     }
   };
 
+  const addSessionDate = (classId) => {
+    const today = new Date().toISOString().split('T')[0];
+    setClasses(classes.map(c => {
+      if (c.id === classId) {
+        const sessionDates = c.sessionDates || [];
+        if (!sessionDates.includes(today)) {
+          return { ...c, sessionDates: [...sessionDates, today].sort() };
+        }
+      }
+      return c;
+    }));
+  };
+
+  const removeSessionDate = (classId, date) => {
+    if (window.confirm('Remove this session date? Student attendance for this date will be lost.')) {
+      setClasses(classes.map(c => {
+        if (c.id === classId) {
+          return { ...c, sessionDates: (c.sessionDates || []).filter(d => d !== date) };
+        }
+        return c;
+      }));
+      setStudents(students.map(s => {
+        if (s.classId === classId && s.attendance) {
+          const newAttendance = { ...s.attendance };
+          delete newAttendance[date];
+          return { ...s, attendance: newAttendance };
+        }
+        return s;
+      }));
+    }
+  };
+
+  const toggleAttendance = (studentId, date) => {
+    setStudents(students.map(s => {
+      if (s.id === studentId) {
+        const attendance = s.attendance || {};
+        return { 
+          ...s, 
+          attendance: { 
+            ...attendance, 
+            [date]: !attendance[date] 
+          } 
+        };
+      }
+      return s;
+    }));
+  };
+
+  const getAttendanceStats = (studentId, classId) => {
+    const student = students.find(s => s.id === studentId);
+    const classObj = classes.find(c => c.id === classId);
+    if (!student || !classObj) return { attended: 0, total: 0, percentage: 0 };
+    
+    const sessionDates = classObj.sessionDates || [];
+    const attendance = student.attendance || {};
+    const attended = sessionDates.filter(date => attendance[date]).length;
+    const percentage = sessionDates.length > 0 ? Math.round((attended / sessionDates.length) * 100) : 0;
+    
+    return { attended, total: sessionDates.length, percentage };
+  };
+
+  const resetAllData = () => {
+    const confirmMessage = 
+      "⚠️ WARNING: This will permanently delete ALL data!\n\n" +
+      "This includes:\n" +
+      "• All classes\n" +
+      "• All students\n" +
+      "• All progress tracking\n" +
+      "• All attendance records\n\n" +
+      "This action CANNOT be undone!\n\n" +
+      "Type 'DELETE' below to confirm:";
+    
+    const userInput = window.prompt(confirmMessage);
+    
+    if (userInput === 'DELETE') {
+      localStorage.removeItem('swimTrackerData');
+      setClasses([]);
+      setStudents([]);
+      setExpandedClass(null);
+      setExpandedStudent(null);
+      setEditingClass(null);
+      setEditingStudent(null);
+      setShowAddClassForm(false);
+      setShowAddStudentForm(false);
+      alert('✓ All data has been deleted. App reset to initial state.');
+    } else if (userInput !== null) {
+      alert('Reset cancelled. You must type DELETE exactly to confirm.');
+    }
+  };
+
   const toggleLevelSelection = (level) => {
     setNewClass(prev => ({
       ...prev,
@@ -739,26 +829,44 @@ const SwimTracker = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 p-2 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-3xl shadow-2xl p-8 mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2 text-center">
+        <div className="bg-white rounded-3xl shadow-2xl p-4 sm:p-6 md:p-8 mb-4 sm:mb-6 md:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2 text-center">
             Swim Student Tracker
           </h1>
-          <p className="text-gray-600 text-center mb-6">Track student progress across all swimming levels</p>
+          <p className="text-sm sm:text-base text-gray-600 text-center mb-4">Track student progress across all swimming levels</p>
+          <div className="flex flex-col sm:flex-row gap-2 justify-center">
+            <button
+              onClick={exportData}
+              className="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition"
+            >
+              Export Data
+            </button>
+            <label className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition cursor-pointer text-center">
+              Import Data
+              <input type="file" accept=".json" onChange={importData} className="hidden" />
+            </label>
+            <button
+              onClick={resetAllData}
+              className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition"
+            >
+              Reset All Data
+            </button>
+          </div>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-2xl p-8 mb-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Users className="w-6 h-6" />
+        <div className="bg-white rounded-3xl shadow-2xl p-4 sm:p-6 md:p-8 mb-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Users className="w-5 h-5 sm:w-6 sm:h-6" />
               Classes
             </h2>
             <button
               onClick={() => setShowAddClassForm(!showAddClassForm)}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg text-sm sm:text-base"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
               Add Class
             </button>
           </div>
@@ -815,6 +923,18 @@ const SwimTracker = () => {
                   onChange={(e) => setNewClass({ ...newClass, year: parseInt(e.target.value) })}
                   className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                <div className="flex flex-col">
+                  <label className="text-xs text-gray-600 mb-1">Session Length (weeks)</label>
+                  <input
+                    type="number"
+                    placeholder="8"
+                    min="1"
+                    max="52"
+                    value={newClass.sessionLength}
+                    onChange={(e) => setNewClass({ ...newClass, sessionLength: parseInt(e.target.value) || 8 })}
+                    className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
               
               <div className="mb-4">
@@ -964,18 +1084,93 @@ const SwimTracker = () => {
 
                       {isExpanded && (
                         <div className="mt-6">
-                          <div className="flex justify-between items-center mb-4">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
                             <h4 className="text-lg font-semibold text-gray-900">Students</h4>
                             <button
                               onClick={() => {
                                 setNewStudent({ ...newStudent, classId: classObj.id });
                                 setShowAddStudentForm(true);
                               }}
-                              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-teal-700 hover:to-cyan-700 transition text-sm"
+                              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-teal-700 hover:to-cyan-700 transition text-sm"
                             >
                               <Plus className="w-4 h-4" />
                               Add Student
                             </button>
+                          </div>
+
+                          {/* Attendance Tracker Section */}
+                          <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-3 sm:p-4 mb-4 border-2 border-purple-200">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3">
+                              <h5 className="font-bold text-gray-800 text-sm sm:text-base">📋 Attendance Tracker</h5>
+                              <button
+                                onClick={() => addSessionDate(classObj.id)}
+                                className="w-full sm:w-auto px-3 py-1.5 bg-purple-600 text-white text-xs sm:text-sm font-semibold rounded-lg hover:bg-purple-700 transition"
+                              >
+                                + Today
+                              </button>
+                            </div>
+                            
+                            {(!classObj.sessionDates || classObj.sessionDates.length === 0) ? (
+                              <p className="text-gray-600 text-xs sm:text-sm text-center py-2">No session dates yet. Click "+ Today" to add today's date.</p>
+                            ) : (
+                              <div className="overflow-x-auto -mx-3 sm:mx-0">
+                                <div className="inline-block min-w-full align-middle">
+                                  <table className="min-w-full text-xs sm:text-sm">
+                                    <thead>
+                                      <tr className="border-b-2 border-purple-200">
+                                        <th className="text-left py-2 px-1 sm:px-2 font-semibold text-gray-700 sticky left-0 bg-gradient-to-r from-purple-50 to-pink-50 z-10">Student</th>
+                                        {(classObj.sessionDates || []).map((date, idx) => (
+                                          <th key={date} className="py-2 px-1 sm:px-2 text-center min-w-[60px] sm:min-w-[80px]">
+                                            <div className="flex flex-col items-center gap-1">
+                                              <span className="font-semibold text-gray-700">#{idx + 1}</span>
+                                              <span className="text-[10px] sm:text-xs text-gray-500">{new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                              <button
+                                                onClick={() => removeSessionDate(classObj.id, date)}
+                                                className="text-red-500 hover:text-red-700 text-xs"
+                                                title="Remove date"
+                                              >
+                                                ×
+                                              </button>
+                                            </div>
+                                          </th>
+                                        ))}
+                                        <th className="text-center py-2 px-1 sm:px-2 font-semibold text-gray-700">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {classStudents.map(student => {
+                                        const stats = getAttendanceStats(student.id, classObj.id);
+                                        return (
+                                          <tr key={student.id} className="border-b border-purple-100 hover:bg-white/50">
+                                            <td className="py-2 px-1 sm:px-2 font-medium text-gray-800 sticky left-0 bg-gradient-to-r from-purple-50 to-pink-50 z-10 text-xs sm:text-sm">
+                                              {student.name}
+                                            </td>
+                                            {(classObj.sessionDates || []).map(date => {
+                                              const attended = student.attendance?.[date];
+                                              return (
+                                                <td key={date} className="py-2 px-1 sm:px-2 text-center">
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={attended || false}
+                                                    onChange={() => toggleAttendance(student.id, date)}
+                                                    className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 rounded focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                                                  />
+                                                </td>
+                                              );
+                                            })}
+                                            <td className="py-2 px-1 sm:px-2 text-center font-semibold text-xs sm:text-sm">
+                                              <span className={stats.percentage >= 80 ? 'text-green-600' : stats.percentage >= 60 ? 'text-yellow-600' : 'text-red-600'}>
+                                                {stats.attended}/{stats.total} ({stats.percentage}%)
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           {showAddStudentForm && newStudent.classId === classObj.id && (
